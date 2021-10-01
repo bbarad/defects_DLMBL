@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 import h5py
 
 
-class ISBI_dataloader(Dataset):
+class ISBIDataset(Dataset):
     def __init__(self,filename):
         self.filename = filename
         self.samples = self.get_num_samples()
