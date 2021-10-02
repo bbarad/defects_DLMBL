@@ -7,3 +7,6 @@ tensorboard
 h5py
 matplotlib
 zarr
+
+# Github installs
+git+https://github.com/imagirom/embeddingutils.git
