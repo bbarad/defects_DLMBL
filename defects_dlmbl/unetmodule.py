@@ -20,7 +20,13 @@ class UNetModule(LightningModule):
 	def training_step(self,batch,batch_idx):
 		x,y=batch
 		logits=self(x)
-		loss=F.nll_loss(logits,y)
+		y = y.float()
+		loss=F.binary_cross_entropy_with_logits(logits,y)
+		logger = self.logger.experiment
+		self.log('train_loss',loss)
+		logger.add_image('image', x.squeeze(0))
+		logger.add_image('affinity', logits.squeeze(0))
+		logger.add_image('GT',y.squeeze(0))
 		return loss
 
 	def configure_optimizers(self):
