@@ -1,6 +1,7 @@
 numpy
 torch 
-# pytorch-lightning
+pytorch-lightning
 jupyter 
 tensorboard 
 h5py
+matplotlib
