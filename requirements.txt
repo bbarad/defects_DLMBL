@@ -1,7 +1,6 @@
 numpy
 torch 
-pytorch-lightning
+# pytorch-lightning
 jupyter 
-pytorch 
 tensorboard 
 h5py
