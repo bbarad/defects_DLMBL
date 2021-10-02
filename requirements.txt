@@ -1,1 +1,7 @@
-torch == 1.9.1
+numpy
+torch 
+pytorch-lightning
+jupyter 
+pytorch 
+tensorboard 
+h5py
