@@ -21,6 +21,6 @@ class ISBIDataset(Dataset):
     def __getitem__(self,index):
         with h5py.File(self.filename) as f:
             x = f['raw'][index]
-            y = f['affinities'][:,index]
-        return torch.tensor(x),torch.tensor(y)
+            y = f['affinities'][0,index]
+        return torch.tensor(x).unsqueeze(0),torch.tensor(y).long()
 
