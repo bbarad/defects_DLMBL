@@ -79,13 +79,14 @@ class CREMIDataset(Dataset):
             samples = len(list(f['raw']))
         return samples
 
-    def augment_image_and_labels(self,x,y):
-        x = np.expand_dims(x, 0)
-        x_len = 1
-        stack = np.concatenate((x,y), axis=0)
-        augmenter = iaa.Sequential([iaa.CropToFixedSize(height=256, width=256)])
-        stack = np.array(augmenter.augment_images(stack))
-        x,y = stack[:x_len,...], stack[x_len:,...]
+    def augment_image_and_labels(self,x,y, cropsize=256):
+        assert len(x.shape)==2 and len(y.shape)==2
+        x = x[...,None]
+        y = y[None,...,None]
+        augmenter = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
+        x,y = augmenter(image=x, segmentation_maps=y.astype('uint16'))
+        x = x[None,...,0]
+        y = y[0,...,0]
         return x,y
 
     def affinities(self, y, pad_size=1):
@@ -107,9 +108,8 @@ class CREMIDataset(Dataset):
         with zarr.open(self.filename, 'r') as test:
             x = test[f'raw/{index}'][...]
             y = test[f'labels/{index}'][...]
-            y = self.affinities(y)
             x,y = self.augment_image_and_labels(x,y)
-
+            y = self.affinities(y)
             x = torch.tensor(x).float()
             y = torch.tensor(y)
 
