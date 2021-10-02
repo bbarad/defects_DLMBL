@@ -5,3 +5,4 @@ jupyter
 tensorboard 
 h5py
 matplotlib
+zarr
