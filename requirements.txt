@@ -1,3 +1,4 @@
+imgaug
 numpy
 torch 
 pytorch-lightning
