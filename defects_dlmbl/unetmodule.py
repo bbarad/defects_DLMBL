@@ -10,12 +10,9 @@ from cremi_tools.metrics import cremi_metrics
 
 
 class UNetModule(LightningModule):
-	def __init__(self, num_fmaps=18, inc_factors=3, depth = 4, offsets=None, separating_channel=2):
+	def __init__(self, num_fmaps=18, inc_factors=3, depth = 4, offsets=[[-1,0],[0,-1]], separating_channel=2):
 		super().__init__()
-		if not offsets:
-			self.offsets = [[-1,0],[0,-1]]
-		else:
-			self.offsets = offsets
+		self.offsets = offsets
 		self.separating_channel=separating_channel
 		self.unet = UNet(in_channels=1,
            num_fmaps=num_fmaps,
