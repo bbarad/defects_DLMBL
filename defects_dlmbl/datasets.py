@@ -125,8 +125,8 @@ class CREMIDataset(Dataset):
         y = self.y[index]
         y = skimage.measure.label(y).astype('int16')
         x,y = self.augment_image_and_labels(x,y)
-        y = self.affinities(y)
+        affinities = self.affinities(y)
         x = torch.tensor(x).float()
-        y = torch.tensor(y)
-
-        return x, y
+        affinities = torch.tensor(affinities)
+        y = torch.tensor(y).unsqueeze(0)
+        return x, affinities, y
