@@ -2,6 +2,8 @@ inferno-pytorch
 imgaug
 numpy
 torch 
+torchvision
+waterz
 pytorch-lightning
 jupyter 
 tensorboard 
@@ -11,3 +13,4 @@ zarr
 
 # Github installs
 git+https://github.com/imagirom/embeddingutils.git
+git+https://github.com/constantinpape/cremi_tools
