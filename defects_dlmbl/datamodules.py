@@ -23,7 +23,7 @@ class ISBIDataModule(LightningDataModule):
 
 
 class CREMIDataModule(LightningDataModule):
-	def __init__(self, train_filename, augmenter = None, augment_and_crop=False, pad=0, offset=None):
+	def __init__(self, train_filename, augmenter = None, augment_and_crop=False, pad=0, offset=[[-1,0],[0,-1]]):
 		super().__init__()
 		self.train_dims = None
 		self.train_filename = train_filename
