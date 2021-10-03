@@ -45,14 +45,6 @@ class UNetModule(LightningModule):
 			logger.add_image('affinity', affinity_image)
 			affinity_image = affinity_image.squeeze(0).cpu().detach().numpy()
 
-			# affs = np.stack([
-			# np.zeros_like(affinity_image[0]),
-			# affinity_image[0],
-			# affinity_image[1]]
-			# )
-			# waterz agglomerate requires 4d affs (c, d, h, w) - add fake z dim
-			# affs = np.expand_dims(affs, axis=1)
-			# segmentation = seg.watershed_from_affinities(affs, threshold=0.95)
 			segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 			logger.add_image('segmentation', segmentation,dataformats='HW')
 			logger.add_image('GT',y.squeeze(0))
@@ -71,18 +63,10 @@ class UNetModule(LightningModule):
 		y = y.float()
 		logits *= (y!=-1).float()
 		affinity_image = torch.sigmoid(logits).squeeze(0).cpu().detach().numpy()
-		# affs = np.stack([
-		# 	np.zeros_like(affinity_image[0]),
-		# 	affinity_image[0],
-		# 	affinity_image[1]]
-		# )
-		# waterz agglomerate requires 4d affs (c, d, h, w) - add fake z dim
-		# affs = np.expand_dims(affs, axis=1)
-		# segmentation = seg.watershed_from_affinities(affs, threshold=0.95)
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 		val_loss=F.binary_cross_entropy_with_logits(logits,y)
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze())
-		self.log("val_loss", val_loss)
+		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
 		self.log("val_performance", val_scores)
 
 
