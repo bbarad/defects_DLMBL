@@ -70,10 +70,13 @@ class ISBIDataset(Dataset):
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename,offsets=[[-1, 0], [0, -1]]):
+    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]]):
         self.filename = filename
-        self.samples = self.get_num_samples()
         self.offsets=offsets
+        if indices is None:
+            indices = list(range(self.get_num_samples()))
+        self.x, self.y = self.read_data(indices)
+        self.samples = len(self.x)
 
     def __len__(self):
         return self.samples
@@ -82,6 +85,12 @@ class CREMIDataset(Dataset):
         with zarr.open(self.filename, 'r') as f:
             samples = len(list(f['raw']))
         return samples
+
+    def read_data(self,indices):
+        with zarr.open(self.filename, 'r') as z:
+            x = np.array([z[f'raw/{index}'] for index in indices])
+            y = np.array([z[f'labels/{index}'] for index in indices])
+        return x,y
 
     def augment_image_and_labels(self,x,y, cropsize=256):
         assert len(x.shape)==2 and len(y.shape)==2
@@ -112,13 +121,12 @@ class CREMIDataset(Dataset):
         return seg2aff.tensor_function(y)
             
     def __getitem__(self,index):
-        with zarr.open(self.filename, 'r') as test:
-            x = test[f'raw/{index}'][...]
-            y = test[f'labels/{index}'][...]
-            y = skimage.measure.label(y).astype('int16')
-            x,y = self.augment_image_and_labels(x,y)
-            y = self.affinities(y)
-            x = torch.tensor(x).float()
-            y = torch.tensor(y)
+        x = self.x[index]
+        y = self.y[index]
+        y = skimage.measure.label(y).astype('int16')
+        x,y = self.augment_image_and_labels(x,y)
+        y = self.affinities(y)
+        x = torch.tensor(x).float()
+        y = torch.tensor(y)
 
         return x, y
