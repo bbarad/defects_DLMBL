@@ -58,8 +58,6 @@ def watershed_from_affinities(
 
         boundary_mask = mean_affs[z]>0.5*max_affinity_value
         boundary_distances = distance_transform_edt(boundary_mask)
-        print(boundary_distances)
-
         if labels_mask is not None:
 
             boundary_mask *= labels_mask.astype(bool)
