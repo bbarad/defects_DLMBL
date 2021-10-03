@@ -70,7 +70,7 @@ class ISBIDataset(Dataset):
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0):
+    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0, crop_size=260):
 
         self.filename = filename
         # maybe make offsets more flexible. 
@@ -86,6 +86,7 @@ class CREMIDataset(Dataset):
             self.augmenter = augmenter
         else:
             self.augmenter = iaa.Identity()
+        self.crop_size = crop_size
 
     def __len__(self):
         return self.samples

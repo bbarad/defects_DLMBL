@@ -5,7 +5,7 @@ from pytorch_lightning.core.lightning import LightningModule
 from defects_dlmbl.segment_affinities import mutex_watershed
 import numpy as np
 from skimage.io import imsave
-from inferno,extensions.criteria import set_similarity_measures as sim
+from inferno.extensions.criteria import set_similarity_measures as sim
 from cremi_tools.metrics import cremi_metrics
 
 
@@ -35,12 +35,19 @@ class UNetModule(LightningModule):
 	def training_step(self,batch,batch_idx):
 		x,y,gt_seg=batch
 		logits=self(x)
+		crop_val = (y.shape[-1]-logits.shape[-1])/2
+		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
+		crop_val = int(crop_val)
+		y = y[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		y = y.float()
 		logits *= (y!=-1).float() # ignore label -1
 		
 		# SDL input shape expects [b, c, ...]
-		py = nn.Softmax(logits) 
-		loss = np.sum([self.DiceLoss(pred, y) for pred in py])
+		softmax = torch.nn.Softmax()
+		py = softmax(logits) 
+		loss = self.DiceLoss(py, y)
+
 		
 		
 		#loss=F.binary_cross_entropy_with_logits(logits,y)
@@ -59,22 +66,32 @@ class UNetModule(LightningModule):
 			logger.add_image('segmentation', segmentation,dataformats='HW')
 			logger.add_image('GT',y.squeeze(0))
 			if self.global_step % 1000 == 0:
-				imsave(f'images/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
-				imsave(f'images/{self.global_step}_affinity.tif', affinity_image)
-				imsave(f'images/{self.global_step}_gt.tif', gt_seg.cpu().detach().numpy().squeeze(0))
-				imsave(f'images/{self.global_step}_image.tif', x.cpu().detach().numpy().squeeze(0))
+				imsave(f'images_2/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
+				imsave(f'images_2/{self.global_step}_affinity.tif', affinity_image)
+				imsave(f'images_2/{self.global_step}_gt.tif', gt_seg.cpu().detach().numpy().squeeze(0))
+				imsave(f'images_2/{self.global_step}_image.tif', x.cpu().detach().numpy().squeeze(0))
 			scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().detach().numpy().squeeze())
 			self.log("performance", scores)
-		return loss
+		return {"loss": loss}
 		
 	def validation_step(self,batch,batch_idx):
 		x,y,gt_seg=batch
 		logits=self(x)
+		crop_val = (y.shape[-1]-logits.shape[-1])/2
+		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
+		crop_val = int(crop_val)
+		y = y[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		y = y.float()
-		logits *= (y!=-1).float()
+		logits *= (y!=-1).float() # ignore label -1
+		
+		# SDL input shape expects [b, c, ...]
+		softmax = torch.nn.Softmax()
+		py = softmax(logits)
+		val_loss = self.DiceLoss(py,y)
+
 		affinity_image = torch.sigmoid(logits).squeeze(0).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
-		val_loss=F.binary_cross_entropy_with_logits(logits,y)
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze())
 		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
 		self.log("val_performance", val_scores)
