@@ -135,3 +135,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+notebooks/img_grid.png
+notebooks/seg_grid.png
+batch_calc_segmentation.py
