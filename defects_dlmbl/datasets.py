@@ -70,13 +70,15 @@ class ISBIDataset(Dataset):
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]], augmenter=None):
+    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]], augmenter=None, augment_and_crop=True, pad=0):
         self.filename = filename
         self.offsets=offsets
         if indices is None:
             indices = list(range(self.get_num_samples()))
         self.x, self.y = self.read_data(indices)
         self.samples = len(self.x)
+        self.augment_and_crop = augment_and_crop
+        self.pad = pad
         if augmenter:
             self.augmenter = augmenter
         else:
@@ -96,7 +98,7 @@ class CREMIDataset(Dataset):
             y = np.array([z[f'labels/{index}'] for index in indices])
         return x,y
 
-    def augment_image_and_labels(self,x,y, cropsize=256):
+    def augment_image_and_labels(self,x,y, cropsize=260):
         assert len(x.shape)==2 and len(y.shape)==2
         x = x[...,None]
         y = y[None,...,None]
@@ -119,9 +121,14 @@ class CREMIDataset(Dataset):
         x = self.x[index]
         y = self.y[index]
         y = skimage.measure.label(y).astype('int16')
-        x,y = self.augment_image_and_labels(x,y)
+        if self.pad:
+            x = np.pad(x,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+            y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+        if self.augment_and_crop:
+            x,y = self.augment_image_and_labels(x,y)
         affinities = self.affinities(y)
         x = torch.tensor(x).float()
         affinities = torch.tensor(affinities)
         y = torch.tensor(y).unsqueeze(0)
         return x, affinities, y
+

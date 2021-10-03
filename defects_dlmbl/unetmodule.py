@@ -16,7 +16,7 @@ class UNetModule(LightningModule):
            num_fmaps=num_fmaps,
            fmap_inc_factors=inc_factors,
            downsample_factors=[[2,2] for _ in range(depth)],
-           padding='same')
+           padding='valid')
 		self.final_conv=torch.nn.Conv2d(num_fmaps,num_affinities, 1)
 
 	def forward(self,x):
@@ -78,10 +78,7 @@ class UNetModule(LightningModule):
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze(0))
 		self.log("val_loss", val_loss)
 		self.log("val_performance", val_scores)
+		return val_loss
 
-
-
-	
-	
 	def configure_optimizers(self):
 		return torch.optim.Adam(self.parameters(),lr=1e-4)

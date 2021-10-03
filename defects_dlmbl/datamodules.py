@@ -23,11 +23,14 @@ class ISBIDataModule(LightningDataModule):
 
 
 class CREMIDataModule(LightningDataModule):
-	def __init__(self, train_filename, augmenter = None):
+	def __init__(self, train_filename, augmenter = None, augment_and_crop=False, pad=0):
 		super().__init__()
 		self.train_dims = None
 		self.train_filename = train_filename
 		self.augmenter = augmenter
+		self.augment_and_crop = augment_and_crop
+		self.pad = pad
+
 
 	def setup(self, stage = None):
 		full_dataset = len(CREMIDataset(self.train_filename))
@@ -38,10 +41,7 @@ class CREMIDataModule(LightningDataModule):
 		self.val = CREMIDataset(self.train_filename,indices=val_indices)	
 
 	def train_dataloader(self):
-		return DataLoader(self.train,batch_size=1, num_workers=8)
-	
-	# def train_dataloader(self):
-	# 	return DataLoader(self.test,batch_size=1)
+		return DataLoader(self.train,batch_size=1, num_workers=8, augment_and_crop=self.augment_and_crop, pad=self.pad)
 
 	def val_dataloader(self):
-		return DataLoader(self.val,batch_size=1)
+		return DataLoader(self.val,batch_size=1, num_workers=8, augment_and_crop=self.augment_and_crop, pad=self.pad)
