@@ -14,3 +14,5 @@ zarr
 # Github installs
 git+https://github.com/imagirom/embeddingutils.git
 git+https://github.com/constantinpape/cremi_tools
+
+# conda install -c conda-forge affogato

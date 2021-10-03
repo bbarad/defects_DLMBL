@@ -65,14 +65,17 @@ class ISBIDataset(Dataset):
     def __getitem__(self,index):
         with h5py.File(self.filename) as f:
             x = f['raw'][index]
-            y = f['affinities'][0,index]
-        return torch.tensor(x).unsqueeze(0),torch.tensor(y).long()
+            y = f['affinities'][:,index]
+        return torch.tensor(x).unsqueeze(0),torch.tensor(y)#.long()
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]], augmenter=None, augment_and_crop=True, pad=0):
+    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0):
+
         self.filename = filename
-        self.offsets=offsets
+        # maybe make offsets more flexible. 
+        # Could use len(offsets) to set network output channels?
+        self.offsets=offsets   
         if indices is None:
             indices = list(range(self.get_num_samples()))
         self.x, self.y = self.read_data(indices)
@@ -126,9 +129,8 @@ class CREMIDataset(Dataset):
             y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
         if self.augment_and_crop:
             x,y = self.augment_image_and_labels(x,y)
-        affinities = self.affinities(y)
+        aff = self.affinities(y)
         x = torch.tensor(x).float()
-        affinities = torch.tensor(affinities)
+        aff = torch.tensor(aff)
         y = torch.tensor(y).unsqueeze(0)
-        return x, affinities, y
-
+        return x, aff, y
