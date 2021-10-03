@@ -70,9 +70,11 @@ class ISBIDataset(Dataset):
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]], augmenter=None):
+    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None):
         self.filename = filename
-        self.offsets=offsets
+        # maybe make offsets more flexible. 
+        # Could use len(offsets) to set network output channels?
+        self.offsets=offsets   
         if indices is None:
             indices = list(range(self.get_num_samples()))
         self.x, self.y = self.read_data(indices)
@@ -113,7 +115,13 @@ class CREMIDataset(Dataset):
             self.offsets,
             retain_segmentation=False,
             segmentation_to_binary=False)
-        return seg2aff.tensor_function(y)
+        # make long range affinities repulsive. 
+        # verify switching correct set of affinities
+        affinities = seg2aff.tensor_function(y)
+        attr_repulsive = affinities.copy()
+        attr_repulsive[2:] *= -1 # is this the right set of aff to switch?
+        attr_repulsive[2:] += 1 
+        return attr_repulsive
             
     def __getitem__(self,index):
         x = self.x[index]

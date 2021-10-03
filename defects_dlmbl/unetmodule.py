@@ -10,7 +10,7 @@ from cremi_tools.metrics import cremi_metrics
 
 
 class UNetModule(LightningModule):
-	def __init__(self, num_fmaps=18, num_affinities=2, inc_factors=3, depth = 4):
+	def __init__(self, num_fmaps=18, num_affinities=4, inc_factors=3, depth = 4):
 		super().__init__()
 		self.unet = UNet(in_channels=1,
            num_fmaps=num_fmaps,
