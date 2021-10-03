@@ -5,6 +5,9 @@ from pytorch_lightning.core.lightning import LightningModule
 import segment_affinities as seg
 import numpy as np
 
+from cremi_tools.metrics import cremi_metrics
+
+
 class UNetModule(LightningModule):
 	def __init__(self, num_fmaps=12, num_affinities=2):
 		super().__init__()
@@ -21,7 +24,7 @@ class UNetModule(LightningModule):
 		return x
 
 	def training_step(self,batch,batch_idx):
-		x,y=batch
+		x,y,gt_seg=batch
 		logits=self(x)
 		y = y.float()
 		logits *= (y!=-1).float() # ignore label -1
@@ -43,7 +46,10 @@ class UNetModule(LightningModule):
 			affs = np.expand_dims(affs, axis=1)
 			segmentation = seg.watershed_from_affinities(affs)
 			logger.add_image('segmentation', segmentation[0].squeeze())
+
 			logger.add_image('GT',y.squeeze(0))
+			cremi_score, vi_split, vi_merge, adapted_rand = cremi_metrics(segmentation, gt_seg)
+			self.log("performance", {"Cremi Score": cremi_score, "VI Split": vi_split, "VI Merge": vi_merge, "Adapted Rand": adapted_rand})
 		return loss
 	
 	
