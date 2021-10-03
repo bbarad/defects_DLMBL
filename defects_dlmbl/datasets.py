@@ -115,13 +115,7 @@ class CREMIDataset(Dataset):
             self.offsets,
             retain_segmentation=False,
             segmentation_to_binary=False)
-        # make long range affinities repulsive. 
-        # verify switching correct set of affinities
-        affinities = seg2aff.tensor_function(y)
-        attr_repulsive = affinities.copy()
-        attr_repulsive[2:] *= -1 # is this the right set of aff to switch?
-        attr_repulsive[2:] += 1 
-        return attr_repulsive
+        return affinities = seg2aff.tensor_function(y)
             
     def __getitem__(self,index):
         x = self.x[index]
