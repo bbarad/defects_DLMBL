@@ -30,19 +30,20 @@ class UNetModule(LightningModule):
 			affs[1]]
 		)
 
+		# waterz agglomerate requires 4d affs (c, d, h, w) - add fake z dim
+		affs = np.expand_dims(affs, axis=1)
+
 		loss=F.binary_cross_entropy_with_logits(logits,y)
 		logger = self.logger.experiment
 		self.log('train_loss',loss)
 		if self.global_step % 100 == 0:
-			segmentation = seg.get_segmentation(affs, threshold=.5)
+			segmentation = seg.watershed_from_affinities(affs)
 			logger.add_image('image', x.squeeze(0))
 			affinity_image = torch.sigmoid(logits)
 			logger.add_image('affinity', affinity_image.squeeze(0))
-			logger.add_image('segmentation', ?????)
+			logger.add_image('segmentation', segmentation[0].squeeze())
 			logger.add_image('GT',y.squeeze(0))
 		return loss
-
-	def getSegmentation
 	
 	
 	def configure_optimizers(self):
