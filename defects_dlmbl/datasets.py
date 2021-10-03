@@ -115,15 +115,15 @@ class CREMIDataset(Dataset):
             self.offsets,
             retain_segmentation=False,
             segmentation_to_binary=False)
-        return affinities = seg2aff.tensor_function(y)
+        return seg2aff.tensor_function(y)
             
     def __getitem__(self,index):
         x = self.x[index]
         y = self.y[index]
         y = skimage.measure.label(y).astype('int16')
         x,y = self.augment_image_and_labels(x,y)
-        affinities = self.affinities(y)
+        aff = self.affinities(y)
         x = torch.tensor(x).float()
-        affinities = torch.tensor(affinities)
+        aff = torch.tensor(aff)
         y = torch.tensor(y).unsqueeze(0)
-        return x, affinities, y
+        return x, aff, y

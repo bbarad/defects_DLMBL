@@ -85,8 +85,8 @@ def watershed_from_affinities(
 
 def mutex_watershed(affinities,offsets,seperating_channel=2,strides=None):
 		attractive_repuslive_weights = affinities.copy()
-		attractive_repuslive_weights[:seperating_channel] *= -1
-		attractive_repuslive_weights[:seperating_channel] += +1
+		attractive_repuslive_weights[seperating_channel:] *= -1
+		attractive_repuslive_weights[seperating_channel:] += +1
 		seg = compute_mws_segmentation(attractive_repuslive_weights, offsets, seperating_channel, strides=strides)
 		return seg
 
