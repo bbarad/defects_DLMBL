@@ -18,10 +18,10 @@ def watershed_from_boundary_distance(
     maxima = max_filtered==boundary_distances
     seeds, n = label(maxima)
 
-    print(f"Found {n} fragments")
+    # print(f"Found {n} fragments")
 
     if n == 0:
-        return np.zeros(boundary_distances.shape, dtype=np.uint64), id_offset
+        return np.zeros(boundary_distances.shape, dtype=np.uint16), id_offset
 
     seeds[seeds!=0] += id_offset
 

@@ -70,13 +70,17 @@ class ISBIDataset(Dataset):
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]]):
+    def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1]], augmenter=None):
         self.filename = filename
         self.offsets=offsets
         if indices is None:
             indices = list(range(self.get_num_samples()))
         self.x, self.y = self.read_data(indices)
         self.samples = len(self.x)
+        if augmenter:
+            self.augmenter = augmenter
+        else:
+            self.augmenter = iaa.Identity()
 
     def __len__(self):
         return self.samples
@@ -96,17 +100,8 @@ class CREMIDataset(Dataset):
         assert len(x.shape)==2 and len(y.shape)==2
         x = x[...,None]
         y = y[None,...,None]
-        augmenter = iaa.Sequential([iaa.Affine(scale=(0.8, 1.2), rotate=(-45, 45)),
-                                    iaa.Flipud(0.5),
-                                    iaa.Fliplr(0.5),
-                                    iaa.geometric.ElasticTransformation(alpha=(0, 20), sigma=10),
-                                    iaa.GaussianBlur(sigma=(0, 2)),
-                                    iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 10)),
-                                    iaa.LinearContrast((0.75, 1.5)),
-                                    iaa.Multiply((0.8, 1.2)),
-                                    iaa.CoarseDropout(p=(0, 0.1), size_percent=(0.1, 0.5)),
-                                    ],random_order=True)
-        x,y = augmenter(image=x, segmentation_maps=y)
+        
+        x,y = self.augmenter(image=x, segmentation_maps=y)
         cropper = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
         x,y = cropper(image=x, segmentation_maps=y)
         x = x[None,...,0]
