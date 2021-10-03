@@ -126,7 +126,7 @@ class CREMIDataset(Dataset):
         y = skimage.measure.label(y).astype('int16')
         if self.pad:
             x = np.pad(x,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
-            y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+            # y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
         if self.augment_and_crop:
             x,y = self.augment_image_and_labels(x,y)
         aff = self.affinities(y)

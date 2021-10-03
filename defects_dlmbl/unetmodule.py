@@ -20,7 +20,7 @@ class UNetModule(LightningModule):
 		self.unet = UNet(in_channels=1,
            num_fmaps=num_fmaps,
            fmap_inc_factors=inc_factors,
-           downsample_factors=[[2,2] for _ in range(depth)],
+           downsample_factors=[[2,2] for _ in range(depth-1)],
            padding='valid')
 		self.final_conv=torch.nn.Conv2d(num_fmaps,len(self.offsets), 1)
 
