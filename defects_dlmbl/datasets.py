@@ -82,9 +82,20 @@ class CREMIDataset(Dataset):
     def augment_image_and_labels(self,x,y, cropsize=256):
         assert len(x.shape)==2 and len(y.shape)==2
         x = x[...,None]
-        y = y[None,...,None]
-        augmenter = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
-        x,y = augmenter(image=x, segmentation_maps=y.astype('uint16'))
+        y = y[None,...,None].astype('uint16')
+        augmenter = iaa.Sequential([iaa.Affine(scale=(0.8, 1.2), rotate=(-45, 45)),
+                                    iaa.Flipud(0.5),
+                                    iaa.Fliplr(0.5),
+                                    iaa.geometric.ElasticTransformation(alpha=(0, 20), sigma=10),
+                                    iaa.GaussianBlur(sigma=(0, 2)),
+                                    iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 10)),
+                                    iaa.LinearContrast((0.75, 1.5)),
+                                    iaa.Multiply((0.8, 1.2)),
+                                    iaa.CoarseDropout(p=(0, 0.1), size_percent=(0.1, 0.5)),
+                                    ],random_order=True)
+        x,y = augmenter(image=x, segmentation_maps=y)
+        cropper = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
+        x,y = cropper(image=x, segmentation_maps=y)
         x = x[None,...,0]
         y = y[0,...,0]
         return x,y
@@ -105,9 +116,9 @@ class CREMIDataset(Dataset):
         return np.stack((aff1, aff2), axis=0)
             
     def __getitem__(self,index):
-        with zarr.open(self.filename, 'r') as test:
-            x = test[f'raw/{index}'][...]
-            y = test[f'labels/{index}'][...]
+        with zarr.open(self.filename, 'r') as f:
+            x = f[f'raw/{index}'][...]
+            y = f[f'labels/{index}'][...]
             x,y = self.augment_image_and_labels(x,y)
             y = self.affinities(y)
             x = torch.tensor(x).float()
