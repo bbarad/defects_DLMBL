@@ -1,7 +1,40 @@
 import waterz
+from scipy.ndimage import label
 from scipy.ndimage.filters import maximum_filter
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.segmentation import watershed
+from skimage.morphology import remove_small_holes
+import numpy as np
+
+
+def watershed_from_boundary_distance(
+        boundary_distances,
+        boundary_mask,
+        return_seeds=False,
+        id_offset=0,
+        min_seed_distance=10):
+
+    max_filtered = maximum_filter(boundary_distances, min_seed_distance)
+    maxima = max_filtered==boundary_distances
+    seeds, n = label(maxima)
+
+    print(f"Found {n} fragments")
+
+    if n == 0:
+        return np.zeros(boundary_distances.shape, dtype=np.uint64), id_offset
+
+    seeds[seeds!=0] += id_offset
+
+    fragments = watershed(
+        boundary_distances.max() - boundary_distances,
+        seeds,
+        mask=boundary_mask)
+
+    ret = (fragments.astype(np.uint64), n + id_offset)
+    if return_seeds:
+        ret = ret + (seeds.astype(np.uint64),)
+
+    return ret
 
 
 def watershed_from_affinities(
@@ -12,7 +45,7 @@ def watershed_from_affinities(
         min_seed_distance=10,
         labels_mask=None):
 
-    mean_affs = 0.5*(affs[1] + affs[2])
+    mean_affs = (affs[1] + affs[2])>0.5
     depth = mean_affs.shape[0]
 
     fragments = np.zeros(mean_affs.shape, dtype=np.uint64)
@@ -25,6 +58,7 @@ def watershed_from_affinities(
 
         boundary_mask = mean_affs[z]>0.5*max_affinity_value
         boundary_distances = distance_transform_edt(boundary_mask)
+        print(boundary_distances)
 
         if labels_mask is not None:
 
@@ -43,7 +77,7 @@ def watershed_from_affinities(
 
         id_offset = ret[1]
 
-    ret = (fragments, id_offset)
+    ret = (fragments)
     if return_seeds:
         ret += (seeds,)
 
@@ -51,11 +85,12 @@ def watershed_from_affinities(
 
 
 
-# utility function to agglomerate fragments using underlying affinities as edge weights
+""" # utility function to agglomerate fragments using underlying affinities as edge weights
 # returns a segmentation from a final threshold
 
-def get_segmentation(affinities, threshold, labels_mask=None):
-
+def get_segmentation(affinities, threshold=.5, labels_mask=None):
+    threshold=threshold
+    
     fragments = watershed_from_affinities(
             affinities,
             labels_mask=labels_mask)[0]
@@ -70,4 +105,14 @@ def get_segmentation(affinities, threshold, labels_mask=None):
 
     segmentation = next(generator)
 
-    return segmentation
+    
+    # remove small holes and relabel connected components
+    final_seg, _ = label(
+            remove_small_holes(
+            segmentation.astype(bool),
+            area_threshold=256))
+
+    final_seg = final_seg.astype(np.uint64)
+
+    return final_seg
+ """
