@@ -1,3 +1,4 @@
+from affogato.segmentation import compute_mws_segmentation
 import waterz
 from scipy.ndimage import label
 from scipy.ndimage.filters import maximum_filter
@@ -82,6 +83,12 @@ def watershed_from_affinities(
 
     return ret
 
+def mutex_watershed(affinities,offsets,seperating_channel=2,strides=None):
+		attractive_repuslive_weights = affinities.copy()
+		attractive_repuslive_weights[:seperating_channel] *= -1
+		attractive_repuslive_weights[:seperating_channel] += +1
+		seg = compute_mws_segmentation(attractive_repuslive_weights, offsets, seperating_channel, strides=strides)
+		return seg
 
 
 """ # utility function to agglomerate fragments using underlying affinities as edge weights
