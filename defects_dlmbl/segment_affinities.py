@@ -43,9 +43,10 @@ def watershed_from_affinities(
         fragments_in_xy=True,
         return_seeds=False,
         min_seed_distance=10,
+        threshold=0.95,
         labels_mask=None):
 
-    mean_affs = (affs[1] + affs[2])>0.5
+    mean_affs = (affs[1] + affs[2])*0.5
     depth = mean_affs.shape[0]
 
     fragments = np.zeros(mean_affs.shape, dtype=np.uint64)
@@ -56,7 +57,7 @@ def watershed_from_affinities(
 
     for z in range(depth):
 
-        boundary_mask = mean_affs[z]>0.5*max_affinity_value
+        boundary_mask = mean_affs[z]>threshold*max_affinity_value
         boundary_distances = distance_transform_edt(boundary_mask)
         if labels_mask is not None:
 
