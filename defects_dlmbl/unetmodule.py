@@ -5,12 +5,12 @@ from pytorch_lightning.core.lightning import LightningModule
 from defects_dlmbl.segment_affinities import mutex_watershed
 import numpy as np
 from skimage.io import imsave
-
+from inferno,extensions.criteria import set_similarity_measures as sim
 from cremi_tools.metrics import cremi_metrics
 
 
 class UNetModule(LightningModule):
-	def __init__(self, num_fmaps=18, inc_factors=3, depth = 4, offsets=[[-1,0],[0,-1]], separating_channel=2):
+	def __init__(self, num_fmaps=18, inc_factors=3, depth = 4, offsets=[[-1,0],[0,-1], [-9, 0], [0, -9]], separating_channel=2):
 		super().__init__()
 		self.offsets = offsets
 		self.separating_channel=separating_channel
@@ -20,6 +20,12 @@ class UNetModule(LightningModule):
            downsample_factors=[[2,2] for _ in range(depth)],
            padding='valid')
 		self.final_conv=torch.nn.Conv2d(num_fmaps,len(self.offsets), 1)
+		if not offsets:
+			self.offsets = [[-1,0],[0,-1]]
+		else:
+			self.offsets = offsets
+		self.separating_channel=separating_channel
+		self.DiceLoss = sim.SorensenDiceLoss()
 
 	def forward(self,x):
 		x= self.unet(x)
@@ -31,7 +37,14 @@ class UNetModule(LightningModule):
 		logits=self(x)
 		y = y.float()
 		logits *= (y!=-1).float() # ignore label -1
-		loss=F.binary_cross_entropy_with_logits(logits,y)
+		
+		# SDL input shape expects [b, c, ...]
+		py = nn.Softmax(logits) 
+		loss = np.sum([self.DiceLoss(pred, y) for pred in py])
+		
+		
+		#loss=F.binary_cross_entropy_with_logits(logits,y)
+		
 		logger = self.logger.experiment
 		self.log('train_loss',loss)
 		if self.global_step % 100 == 0:
@@ -59,7 +72,7 @@ class UNetModule(LightningModule):
 		logits=self(x)
 		y = y.float()
 		logits *= (y!=-1).float()
-		affinity_image = torch.sigmoid(logits).squeeze(0).cpu().detach().numpy()
+		affinity_image = torch.sigmoid(logits).squeeze(0).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 		val_loss=F.binary_cross_entropy_with_logits(logits,y)
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze())
