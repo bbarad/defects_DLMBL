@@ -1,11 +1,14 @@
-# conda install jupyter pytorch tensorboard h5py
+import io
+import requests
+
+from embeddingutils.transforms import Segmentation2AffinitiesWithPadding
 import h5py
 from imgaug import augmenters as iaa
 from imgaug.augmentables.segmaps import SegmentationMapsOnImage
 import numpy as np
+import skimage
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
 import zarr
 
 def create_data(
@@ -67,9 +70,10 @@ class ISBIDataset(Dataset):
 
 
 class CREMIDataset(Dataset):
-    def __init__(self,filename):
+    def __init__(self,filename,offsets=[[-1, 0], [0, -1]]):
         self.filename = filename
         self.samples = self.get_num_samples()
+        self.offsets=offsets
 
     def __len__(self):
         return self.samples
@@ -84,30 +88,23 @@ class CREMIDataset(Dataset):
         x = x[...,None]
         y = y[None,...,None]
         augmenter = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
-        x,y = augmenter(image=x, segmentation_maps=y.astype('uint16'))
+        x,y = augmenter(image=x, segmentation_maps=y)
         x = x[None,...,0]
         y = y[0,...,0]
         return x,y
 
-    def affinities(self, y, pad_size=1):
-        # shift 1
-        y0 = y[:-pad_size,:]
-        y1 = y[pad_size:, :]
-        aff1 = y0==y1
-        aff1 = np.pad(aff1, ((1,0), (0,0)))
-        
-        #shift 2
-        y11 = y[:, :-pad_size]
-        y12 = y[:, pad_size:]
-        aff2 = y11==y12
-        aff2 = np.pad(aff2, ((0,0), (1,0)))
-        
-        return np.stack((aff1, aff2), axis=0)
+    def affinities(self,y):
+        seg2aff = Segmentation2AffinitiesWithPadding(
+            self.offsets,
+            retain_segmentation=False,
+            segmentation_to_binary=False)
+        return seg2aff.tensor_function(y)
             
     def __getitem__(self,index):
         with zarr.open(self.filename, 'r') as test:
             x = test[f'raw/{index}'][...]
             y = test[f'labels/{index}'][...]
+            y = skimage.measure.label(y).astype('int16')
             x,y = self.augment_image_and_labels(x,y)
             y = self.affinities(y)
             x = torch.tensor(x).float()

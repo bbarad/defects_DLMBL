@@ -22,6 +22,7 @@ class UNetModule(LightningModule):
 		x,y=batch
 		logits=self(x)
 		y = y.float()
+		logits *= (y!=-1).float() # ignore label -1
 		loss=F.binary_cross_entropy_with_logits(logits,y)
 		logger = self.logger.experiment
 		self.log('train_loss',loss)

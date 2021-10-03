@@ -1,3 +1,4 @@
+inferno-pytorch
 imgaug
 numpy
 torch 
