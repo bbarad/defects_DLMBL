@@ -47,7 +47,7 @@ class UNetModule(LightningModule):
 			)
 			# waterz agglomerate requires 4d affs (c, d, h, w) - add fake z dim
 			affs = np.expand_dims(affs, axis=1)
-			segmentation = seg.watershed_from_affinities(affs)
+			segmentation = seg.watershed_from_affinities(affs, threshold=0.95)
 			logger.add_image('segmentation', segmentation)
 			logger.add_image('GT',y.squeeze(0))
 			if self.global_step % 1000 == 0:
@@ -73,7 +73,7 @@ class UNetModule(LightningModule):
 		)
 		# waterz agglomerate requires 4d affs (c, d, h, w) - add fake z dim
 		affs = np.expand_dims(affs, axis=1)
-		segmentation = seg.watershed_from_affinities(affs)
+		segmentation = seg.watershed_from_affinities(affs, threshold=0.95)
 		val_loss=F.binary_cross_entropy_with_logits(logits,y)
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze(0))
 		self.log("val_loss", val_loss)
