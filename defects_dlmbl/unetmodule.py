@@ -2,6 +2,8 @@ import torch
 from torch.nn import functional as F
 from .unet import UNet
 from pytorch_lightning.core.lightning import LightningModule
+import segment_affinities as seg
+import numpy as np
 
 class UNetModule(LightningModule):
 	def __init__(self, num_fmaps=12, num_affinities=2):
@@ -22,15 +24,26 @@ class UNetModule(LightningModule):
 		x,y=batch
 		logits=self(x)
 		y = y.float()
+		affs = np.stack([
+			np.zeros_like(affs[0]),
+			affs[0],
+			affs[1]]
+		)
+
 		loss=F.binary_cross_entropy_with_logits(logits,y)
 		logger = self.logger.experiment
 		self.log('train_loss',loss)
 		if self.global_step % 100 == 0:
+			segmentation = seg.get_segmentation(affs, threshold=.5)
 			logger.add_image('image', x.squeeze(0))
 			affinity_image = torch.sigmoid(logits)
 			logger.add_image('affinity', affinity_image.squeeze(0))
+			logger.add_image('segmentation', ?????)
 			logger.add_image('GT',y.squeeze(0))
 		return loss
 
+	def getSegmentation
+	
+	
 	def configure_optimizers(self):
 		return torch.optim.Adam(self.parameters(),lr=1e-4)
