@@ -14,9 +14,9 @@ augmenter = iaa.Sequential([iaa.Affine(scale=(0.8, 1.2), rotate=(-25, 25)),
                                     iaa.Flipud(0.5),
                                     iaa.Fliplr(0.5),
                                     iaa.LinearContrast((0.75, 1.5)),
-                                    # iaa.geometric.ElasticTransformation(alpha=(0, 20), sigma=10),
-                                    # iaa.GaussianBlur(sigma=(0, 0.75)),
-                                    # iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 5)),
+                                    iaa.geometric.ElasticTransformation(alpha=(0, 20), sigma=10),
+                                    iaa.GaussianBlur(sigma=(0, 1)),
+                                    iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 10)),
                                     # iaa.CoarseDropout(p=(0, 0.1), size_percent=(0.1, 0.5)),
                                     ],random_order=False)
 
