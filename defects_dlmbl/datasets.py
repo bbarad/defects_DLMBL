@@ -118,8 +118,9 @@ class CREMIDataset(Dataset):
         seg2aff = Segmentation2AffinitiesWithPadding(
             self.offsets,
             retain_segmentation=False,
-            segmentation_to_binary=False)
-        return seg2aff.tensor_function(y)
+            segmentation_to_binary=False,
+            ignore_label=-1)
+        return 1-seg2aff.tensor_function(y)
             
     def __getitem__(self,index):
         x = self.x[index]

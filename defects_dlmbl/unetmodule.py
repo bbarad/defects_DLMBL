@@ -44,10 +44,9 @@ class UNetModule(LightningModule):
 		logits *= (y!=-1).float() # ignore label -1
 		
 		# SDL input shape expects [b, c, ...]
-		softmax = torch.nn.Softmax()
-		py = softmax(logits) 
+		py = F.sigmoid(logits) 
 		loss = self.DiceLoss(py, y)
-
+		loss = loss+len(self.offsets)
 		
 		
 		#loss=F.binary_cross_entropy_with_logits(logits,y)
@@ -72,7 +71,7 @@ class UNetModule(LightningModule):
 				imsave(f'images_2/{self.global_step}_image.tif', x.cpu().detach().numpy().squeeze(0))
 			scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().detach().numpy().squeeze())
 			self.log("performance", scores)
-		return {"loss": loss}
+		return loss
 		
 	def validation_step(self,batch,batch_idx):
 		x,y,gt_seg=batch
@@ -86,10 +85,9 @@ class UNetModule(LightningModule):
 		logits *= (y!=-1).float() # ignore label -1
 		
 		# SDL input shape expects [b, c, ...]
-		softmax = torch.nn.Softmax()
-		py = softmax(logits)
+		py = F.sigmoid(logits) 
 		val_loss = self.DiceLoss(py,y)
-
+		val_loss = val_loss+len(self.offsets)
 		affinity_image = torch.sigmoid(logits).squeeze(0).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze())
