@@ -40,6 +40,7 @@ class UNetModule(LightningModule):
 		crop_val = int(crop_val)
 		y = y[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		x = x[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		y = y.float()
 		logits *= (y!=-1).float() # ignore label -1
 		
