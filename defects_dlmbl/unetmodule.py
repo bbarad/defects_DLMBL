@@ -102,6 +102,7 @@ class UNetModule(LightningModule):
 	def configure_optimizers(self):
 		return torch.optim.Adam(self.parameters(),lr=1e-4)
 
+
 class UNetModuleWithMetricAuxiliary(UNetModule):
 	def __init__(self,metric_dimensions=16,loss_alpha=0.5,**kwargs):
 		super().__init__(**kwargs)
@@ -158,6 +159,93 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 			logits_metric_viz -= logits_metric_viz.min(axis=(-2,-1),keepdims=True)
 			logits_metric_viz /= logits_metric_viz.max(axis=(-2,-1),keepdims=True)
 			logger.add_image('metric_3',logits_metric_viz, self.global_step)
+			logger.add_image('GT',gt_aff[0], self.global_step)
+			if self.global_step % 1000 == 0:
+				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
+				imsave(f'{self.image_dir}/{self.global_step}_affinity.tif', affinity_image)
+				imsave(f'{self.image_dir}/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
+				imsave(f'{self.image_dir}/{self.global_step}_image.tif', x[0].cpu().detach().numpy())
+			scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().detach().numpy())
+			self.log("performance",scores)
+		return loss
+		
+	def validation_step(self,batch,batch_idx):
+		x,gt_aff,gt_seg=batch
+		logits=self(x)
+		crop_val = (gt_aff.shape[-1]-logits.shape[-1])/2
+		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
+		crop_val = int(crop_val)
+		gt_aff = gt_aff[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		gt_aff = gt_aff.float()
+
+		logits_aff = logits[:,:len(self.offsets)]
+		logits_metric = logits[:,len(self.offsets):]
+
+		logits_aff *= (gt_aff!=-1).float() # ignore label -1
+		
+		val_loss = self.calculate_loss(logits_aff,logits_metric,gt_aff,gt_seg)
+
+		affinity_image = torch.sigmoid(logits_aff).cpu().detach().numpy()
+		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
+		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
+		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
+		self.log("val_performance", val_scores)
+		return val_loss
+
+class UNetModuleWithBCEAux(UNetModule):
+	def __init__(self, loss_alpha=0.5,**kwargs):
+		super().__init__(**kwargs)
+		self.loss_alpha = loss_alpha
+		self.output_dims = len(self.offsets) + 2  # extra channels for fg/bg BCE loss
+		self.final_conv=torch.nn.Conv2d(self.num_fmaps,self.output_dims, 1)
+		device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+	def calculate_loss(self,logits_aff, logits_bce, gt_aff, gt_seg):
+		# affinity loss
+		py = F.sigmoid(logits_aff) 
+		loss_aff = self.DiceLoss(py, gt_aff)
+		loss_aff += len(self.offsets)
+		loss_aff /= len(self.offsets)
+		
+		# BCE loss
+		BCE = torch.nn.BCEWithLogitsLoss()
+		bce_loss = BCE(logits_bce, gt_seg)
+		
+		return (self.loss_alpha)*loss_aff + (1-self.loss_alpha)*loss_bce
+
+	def training_step(self,batch,batch_idx):
+		x,gt_aff,gt_seg=batch
+		logits=self(x)
+
+		crop_val = (gt_aff.shape[-1]-logits.shape[-1])/2
+		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
+		crop_val = int(crop_val)
+		gt_aff = gt_aff[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		x = x[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		gt_aff = gt_aff.float()
+
+		logits_aff = logits[:,:len(self.offsets)]
+		logits_bce = logits[:,len(self.offsets):]
+
+		logits_aff *= (gt_aff!=-1).float() # ignore label -1
+
+		loss = self.calculate_loss(logits_aff,logits_bce, gt_aff, gt_seg)
+		
+		logger = self.logger.experiment
+		self.log('train_loss',loss)
+		if self.global_step % 100 == 0:
+			
+			logger.add_image('image', x[0], self.global_step)
+
+			affinity_image = torch.sigmoid(logits_aff)
+			logger.add_image('affinity', affinity_image[0], self.global_step)
+			affinity_image = affinity_image.cpu().detach().numpy()
+			segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
+
+			logger.add_image('segmentation', segmentation[0], self.global_step, dataformats='CHW')
 			logger.add_image('GT',gt_aff[0], self.global_step)
 			if self.global_step % 1000 == 0:
 				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
