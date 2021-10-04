@@ -44,7 +44,7 @@ class CREMIDataModule(LightningDataModule):
 								augment_and_crop=self.augment_and_crop, pad=self.pad)	
 
 	def train_dataloader(self):
-		return DataLoader(self.train,batch_size=10, num_workers=8, shuffle=True)
+		return DataLoader(self.train,batch_size=4, num_workers=8, shuffle=True)
 
 	def val_dataloader(self):
-		return DataLoader(self.val,batch_size=10, num_workers=8, shuffle=True)
+		return DataLoader(self.val,batch_size=4, num_workers=8)

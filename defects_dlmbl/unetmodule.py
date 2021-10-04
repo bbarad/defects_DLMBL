@@ -10,7 +10,7 @@ from cremi_tools.metrics import cremi_metrics
 
 
 class UNetModule(LightningModule):
-	def __init__(self, num_fmaps=18, inc_factors=3, depth = 4, offsets=[[-1,0],[0,-1], [-9, 0], [0, -9]], separating_channel=2):
+	def __init__(self, num_fmaps=18, inc_factors=3, depth = 4, offsets=[[-1,0],[0,-1], [-9, 0], [0, -9]], separating_channel=2, image_dir="images"):
 		super().__init__()
 		self.offsets = offsets
 		self.separating_channel=separating_channel
@@ -26,6 +26,7 @@ class UNetModule(LightningModule):
 			self.offsets = offsets
 		self.separating_channel=separating_channel
 		self.DiceLoss = sim.SorensenDiceLoss()
+		self.image_dir = image_dir
 
 	def forward(self,x):
 		x= self.unet(x)
@@ -66,10 +67,10 @@ class UNetModule(LightningModule):
 			logger.add_image('segmentation', segmentation[0], self.global_step, dataformats='CHW')
 			logger.add_image('GT',y[0], self.global_step)
 			if self.global_step % 1000 == 0:
-				imsave(f'images_2/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
-				imsave(f'images_2/{self.global_step}_affinity.tif', affinity_image)
-				imsave(f'images_2/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
-				imsave(f'images_2/{self.global_step}_image.tif', x[0].cpu().detach().numpy())
+				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
+				imsave(f'{self.image_dir}/{self.global_step}_affinity.tif', affinity_image)
+				imsave(f'{self.image_dir}/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
+				imsave(f'{self.image_dir}/{self.global_step}_image.tif', x[0].cpu().detach().numpy())
 			scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().detach().numpy())
 			self.log("performance",scores)
 		return loss
