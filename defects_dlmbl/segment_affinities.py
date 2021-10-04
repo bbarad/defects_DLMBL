@@ -84,11 +84,15 @@ def watershed_from_affinities(
     return ret
 
 def mutex_watershed(affinities,offsets,seperating_channel=2,strides=None):
-		attractive_repuslive_weights = affinities.copy()
-		attractive_repuslive_weights[:seperating_channel] *= -1
-		attractive_repuslive_weights[:seperating_channel] += +1
-		seg = compute_mws_segmentation(attractive_repuslive_weights, offsets, seperating_channel, strides=strides)
-		return seg
+    attractive_repulsive_weights = affinities.copy()
+    attractive_repulsive_weights[:,:seperating_channel,...] *= -1
+    attractive_repulsive_weights[:,:seperating_channel,...] += +1
+    seg = []
+    for i in range(attractive_repulsive_weights.shape[0]):
+        seg.append(compute_mws_segmentation(attractive_repulsive_weights[i], offsets, seperating_channel, strides=strides)[None])
+    seg = np.array(seg)
+    
+    return seg
 
 
 """ # utility function to agglomerate fragments using underlying affinities as edge weights

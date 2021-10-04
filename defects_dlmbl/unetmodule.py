@@ -56,22 +56,22 @@ class UNetModule(LightningModule):
 		self.log('train_loss',loss)
 		if self.global_step % 100 == 0:
 			
-			logger.add_image('image', x.squeeze(0))
+			logger.add_image('image', x[0], self.global_step)
 
-			affinity_image = torch.sigmoid(logits).squeeze(0)
-			logger.add_image('affinity', affinity_image)
-			affinity_image = affinity_image.squeeze(0).cpu().detach().numpy()
-
+			affinity_image = torch.sigmoid(logits)
+			logger.add_image('affinity', affinity_image[0], self.global_step)
+			affinity_image = affinity_image.cpu().detach().numpy()
 			segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
-			logger.add_image('segmentation', segmentation,dataformats='HW')
-			logger.add_image('GT',y.squeeze(0))
+
+			logger.add_image('segmentation', segmentation[0], self.global_step, dataformats='CHW')
+			logger.add_image('GT',y[0], self.global_step)
 			if self.global_step % 1000 == 0:
 				imsave(f'images_2/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
 				imsave(f'images_2/{self.global_step}_affinity.tif', affinity_image)
-				imsave(f'images_2/{self.global_step}_gt.tif', gt_seg.cpu().detach().numpy().squeeze(0))
-				imsave(f'images_2/{self.global_step}_image.tif', x.cpu().detach().numpy().squeeze(0))
-			scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().detach().numpy().squeeze())
-			self.log("performance", scores)
+				imsave(f'images_2/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
+				imsave(f'images_2/{self.global_step}_image.tif', x[0].cpu().detach().numpy())
+			scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().detach().numpy())
+			self.log("performance",scores)
 		return loss
 		
 	def validation_step(self,batch,batch_idx):
@@ -89,9 +89,10 @@ class UNetModule(LightningModule):
 		py = F.sigmoid(logits) 
 		val_loss = self.DiceLoss(py,y)
 		val_loss = val_loss+len(self.offsets)
-		affinity_image = torch.sigmoid(logits).squeeze(0).cpu().detach().numpy()	
+		affinity_image = torch.sigmoid(logits).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
-		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy().squeeze())
+		print(segmentation.shape, gt_seg.shape)
+		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
 		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
 		self.log("val_performance", val_scores)
 		return val_loss
