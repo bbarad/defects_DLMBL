@@ -91,7 +91,6 @@ class UNetModule(LightningModule):
 		val_loss = val_loss+len(self.offsets)
 		affinity_image = torch.sigmoid(logits).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
-		print(segmentation.shape, gt_seg.shape)
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
 		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
 		self.log("val_performance", val_scores)
