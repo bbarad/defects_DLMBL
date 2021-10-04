@@ -4,6 +4,7 @@ import requests
 from embeddingutils.transforms import Segmentation2AffinitiesWithPadding
 import h5py
 from imgaug import augmenters as iaa
+import imgaug as ia
 from imgaug.augmentables.segmaps import SegmentationMapsOnImage
 import numpy as np
 import skimage
@@ -106,10 +107,11 @@ class CREMIDataset(Dataset):
         assert len(x.shape)==2 and len(y.shape)==2
         x = x[...,None]
         y = y[None,...,None]
-        
-        x,y = self.augmenter(image=x, segmentation_maps=y)
+        ia.seed(np.random.randint(1, 100000))
         cropper = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
         x,y = cropper(image=x, segmentation_maps=y)
+        x,y = self.augmenter(image=x, segmentation_maps=y)
+       
         x = x[None,...,0]
         y = y[0,...,0]
         return x,y
