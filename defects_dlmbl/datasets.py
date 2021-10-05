@@ -1,13 +1,16 @@
 import io
+import os
 import requests
 
 from embeddingutils.transforms import Segmentation2AffinitiesWithPadding
+import glob
 import h5py
 from imgaug import augmenters as iaa
 import imgaug as ia
 from imgaug.augmentables.segmaps import SegmentationMapsOnImage
 import numpy as np
 import skimage
+import tifffile
 import torch
 from torch.utils.data import Dataset
 import zarr
@@ -113,7 +116,7 @@ class CREMIDataset(Dataset):
         cropper = iaa.Sequential([iaa.CropToFixedSize(height=cropsize, width=cropsize)])
         x,y = cropper(image=x, segmentation_maps=y)
         x,y = self.augmenter(image=x, segmentation_maps=y)
-        
+
         x = x[None,...,0]
         y = y[0,...,0]
         return x,y
@@ -141,9 +144,9 @@ class CREMIDataset(Dataset):
         y = torch.tensor(y).unsqueeze(0)
         return x, aff, y
 
-class NMJDataset(Dataset):
-    def __init__(self,data_path,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0, crop_size=120):
-
+class NMJDataset2(Dataset):
+    def __init__(self,data_path,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0, crop_size=None):
+        
         self.data_path = data_path
         # maybe make offsets more flexible. 
         # Could use len(offsets) to set network output channels?
@@ -164,12 +167,15 @@ class NMJDataset(Dataset):
         return self.samples
 
     def get_num_samples(self):
-        samples = len(glob.glob(os.path.join(data_path+"Raw/*.tif")))
+        samples = len(glob.glob(os.path.join(self.data_path,"Raw_Norm/*.tif")))
         return samples
 
     def read_data(self,indices):
-        x_list = glob.glob(os.path.join(data_path+"Raw/*.tif"))
-        y_list = glob.glob(os.path.join(data_path+"GT/*.tif"))
+        x_list = glob.glob(os.path.join(self.data_path+"Raw_Norm/*.tif"))
+        y_list = glob.glob(os.path.join(self.data_path+"GT_Norm/*.tif"))
+        x_list.sort()
+        y_list.sort()
+        
         x = []
         y = []
         for ix in indices:
@@ -178,13 +184,14 @@ class NMJDataset(Dataset):
             
         return x, y
     
-    def augment_image_and_labels(self,x,y, cropsize=self.cropsize):
-        ia.seed()
-        
+    def augment_image_and_labels(self,x,y, cropsize=None):
+        cropsize = self.crop_size
+        ia.seed(np.random.randint(1, 100000))
         x,y = self.augmenter(image=x, segmentation_maps=y)
-        cropper = iaa.CropToFixedSize(height=cropsize, width=cropsize)
-        x,y = cropper(image=x, segmentation_maps=y)
-        x = x[None,...,0]
+        if cropsize:
+            cropper = iaa.CropToFixedSize(height=cropsize, width=cropsize)
+            x,y = cropper(image=x, segmentation_maps=y)
+        x = np.moveaxis(x, 2,0)
         y = y[0,...,0]
         return x,y
 
@@ -209,6 +216,245 @@ class NMJDataset(Dataset):
             y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
         if self.augment_and_crop:
             x,y = self.augment_image_and_labels(x,y)
+        
+        aff = self.affinities(y)
+        x = torch.tensor(x.astype(np.int16)).float()
+        aff = torch.tensor(aff)
+        y = torch.tensor(y).unsqueeze(0)
+        return x, aff, y
+
+
+class WingDataset(Dataset):
+    def __init__(self,data_path,indices=None,offsets=[[-1, 0], [0, -1], [-5, 0], [0, -5]], augmenter=None, augment_and_crop=True, pad=0, crop_size=None):
+        
+        self.data_path = data_path
+        # maybe make offsets more flexible. 
+        # Could use len(offsets) to set network output channels?
+        self.offsets=offsets   
+        if indices is None:
+            indices = list(range(self.get_num_samples()))
+        self.x, self.y = self.read_data(indices)
+        self.samples = len(self.x)
+        self.augment_and_crop = augment_and_crop
+        self.pad = pad
+        if augmenter:
+            self.augmenter = augmenter
+        else:
+            self.augmenter = iaa.Identity()
+        self.crop_size = crop_size
+
+    def __len__(self):
+        return self.samples
+
+    def get_num_samples(self):
+        trainval_data =  np.load('/home/delsignores/defects_DLMBL/data/Flywing_n0/train/train_data.npz')
+        train_images = trainval_data['X_train'].astype(np.float32)
+        train_masks = trainval_data['Y_train']
+        val_images = trainval_data['X_val'].astype(np.float32)
+        val_masks = trainval_data['Y_val']
+        x = np.concatenate((train_images, val_images))
+        samples = len(x)
+        return samples
+
+    def read_data(self,indices):
+        trainval_data =  np.load('/home/delsignores/defects_DLMBL/data/Flywing_n0/train/train_data.npz')
+        train_images = trainval_data['X_train'].astype(np.float32)
+        train_masks = trainval_data['Y_train']
+        val_images = trainval_data['X_val'].astype(np.float32)
+        val_masks = trainval_data['Y_val']
+        
+        x = np.concatenate((train_images, val_images))
+        y = np.concatenate((train_masks, val_masks))
+        return x, y
+    
+    def augment_image_and_labels(self,x,y, cropsize=None):
+        cropsize = self.crop_size
+        ia.seed(np.random.randint(1, 100000))
+        x,y = self.augmenter(image=x, segmentation_maps=y)
+        if cropsize:
+            cropper = iaa.CropToFixedSize(height=cropsize, width=cropsize)
+            x,y = cropper(image=x, segmentation_maps=y)
+        y = y[0,...,0]
+        x = np.moveaxis(x,2,0)
+        return x,y
+
+    def affinities(self,y):
+        seg2aff = Segmentation2AffinitiesWithPadding(
+            self.offsets,
+            retain_segmentation=False,
+            segmentation_to_binary=False,
+            ignore_label=-1)
+        return 1-seg2aff.tensor_function(y)
+            
+    def __getitem__(self,index):
+        x = self.x[index]
+        y = self.y[index]
+        x = np.expand_dims(x, -1)
+        
+        y = skimage.measure.label(y).astype('int16')
+        y = np.expand_dims(y, -1)
+        y = np.expand_dims(y, 0)
+        if self.pad:
+            x = np.pad(x,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+            y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+        if self.augment_and_crop:
+            x,y = self.augment_image_and_labels(x,y)
+        
+        aff = self.affinities(y)
+        x = torch.tensor(x.astype(np.int16)).float()
+        aff = torch.tensor(aff)
+        y = torch.tensor(y).unsqueeze(0)
+        return x, aff, y
+
+
+class WingTestDataset(Dataset):
+    def __init__(self,data_path,indices=None,offsets=[[-1, 0], [0, -1], [-5, 0], [0, -5]], augmenter=None, augment_and_crop=True, pad=0, crop_size=None):
+        
+        self.data_path = data_path
+        # maybe make offsets more flexible. 
+        # Could use len(offsets) to set network output channels?
+        self.offsets=offsets   
+        if indices is None:
+            indices = list(range(self.get_num_samples()))
+        self.x, self.y = self.read_data(indices)
+        self.samples = len(self.x)
+        self.augment_and_crop = augment_and_crop
+        self.pad = pad
+        if augmenter:
+            self.augmenter = augmenter
+        else:
+            self.augmenter = iaa.Identity()
+        self.crop_size = crop_size
+
+    def __len__(self):
+        return self.samples
+
+    def get_num_samples(self):
+        trainval_data =  np.load('/home/delsignores/defects_DLMBL/data/Flywing_n0/test/test_data.npz')
+        train_images = trainval_data['X_test'].astype(np.float32)
+        train_masks = trainval_data['Y_test']
+        samples = len(train_images)
+        return samples
+
+    def read_data(self,indices):
+        trainval_data =  np.load('/home/delsignores/defects_DLMBL/data/Flywing_n0/test/test_data.npz')
+        train_images = trainval_data['X_test'].astype(np.float32)
+        train_masks = trainval_data['Y_test']
+        return x, y
+    
+    def augment_image_and_labels(self,x,y, cropsize=None):
+        cropsize = self.crop_size
+        ia.seed(np.random.randint(1, 100000))
+        x,y = self.augmenter(image=x, segmentation_maps=y)
+        if cropsize:
+            cropper = iaa.CropToFixedSize(height=cropsize, width=cropsize)
+            x,y = cropper(image=x, segmentation_maps=y)
+        y = y[0,...,0]
+        x = np.moveaxis(x,2,0)
+        return x,y
+
+    def affinities(self,y):
+        seg2aff = Segmentation2AffinitiesWithPadding(
+            self.offsets,
+            retain_segmentation=False,
+            segmentation_to_binary=False,
+            ignore_label=-1)
+        return 1-seg2aff.tensor_function(y)
+            
+    def __getitem__(self,index):
+        x = self.x[index]
+        y = self.y[index]
+        x = np.expand_dims(x, -1)
+        
+        y = skimage.measure.label(y).astype('int16')
+        y = np.expand_dims(y, -1)
+        y = np.expand_dims(y, 0)
+        if self.pad:
+            x = np.pad(x,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+            y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+        if self.augment_and_crop:
+            x,y = self.augment_image_and_labels(x,y)
+        
+        aff = self.affinities(y)
+        x = torch.tensor(x.astype(np.int16)).float()
+        aff = torch.tensor(aff)
+        y = torch.tensor(y).unsqueeze(0)
+        return x, aff, y
+
+
+class NMJDataset(Dataset):
+    def __init__(self,data_path,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0, crop_size=None):
+        
+        self.data_path = data_path
+        # maybe make offsets more flexible. 
+        # Could use len(offsets) to set network output channels?
+        self.offsets=offsets   
+        if indices is None:
+            indices = list(range(self.get_num_samples()))
+        self.x, self.y = self.read_data(indices)
+        self.samples = len(self.x)
+        self.augment_and_crop = augment_and_crop
+        self.pad = pad
+        if augmenter:
+            self.augmenter = augmenter
+        else:
+            self.augmenter = iaa.Identity()
+        self.crop_size = crop_size
+
+    def __len__(self):
+        return self.samples
+
+    def get_num_samples(self):
+        samples = len(glob.glob(os.path.join(self.data_path,"Raw_Norm/*.tif")))
+        return samples
+
+    def read_data(self,indices):
+        x_list = glob.glob(os.path.join(self.data_path+"Raw_Norm/*.tif"))
+        y_list = glob.glob(os.path.join(self.data_path+"GT_Norm/*.tif"))
+        x_list.sort()
+        y_list.sort()
+        
+        x = []
+        y = []
+        for ix in indices:
+            x.append(tifffile.imread(x_list[ix]).transpose())
+            y.append(tifffile.imread(y_list[ix]).transpose())
+            
+        return x, y
+    
+    def augment_image_and_labels(self,x,y, cropsize=None):
+        cropsize = self.crop_size
+        ia.seed(np.random.randint(1, 100000))
+        x,y = self.augmenter(image=x, segmentation_maps=y)
+        if cropsize:
+            cropper = iaa.CropToFixedSize(height=cropsize, width=cropsize)
+            x,y = cropper(image=x, segmentation_maps=y)
+        y = y[0,...,0]
+        x = np.moveaxis(x,2,0)
+        return x,y
+
+    def affinities(self,y):
+        seg2aff = Segmentation2AffinitiesWithPadding(
+            self.offsets,
+            retain_segmentation=False,
+            segmentation_to_binary=False,
+            ignore_label=-1)
+        return 1-seg2aff.tensor_function(y)
+            
+    def __getitem__(self,index):
+        x = self.x[index]
+        y = self.y[index]
+        x = np.expand_dims(x, -1)
+        
+        y = skimage.measure.label(y).astype('int16')
+        y = np.expand_dims(y, -1)
+        y = np.expand_dims(y, 0)
+        if self.pad:
+            x = np.pad(x,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+            y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
+        if self.augment_and_crop:
+            x,y = self.augment_image_and_labels(x,y)
+        
         aff = self.affinities(y)
         x = torch.tensor(x.astype(np.int16)).float()
         aff = torch.tensor(aff)

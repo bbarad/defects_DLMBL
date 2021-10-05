@@ -1,7 +1,7 @@
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
-
-from .datasets import ISBIDataset, CREMIDataset
+from torchvision import transforms
+from .datasets import ISBIDataset, CREMIDataset, NMJDataset, WingDataset
 
 class ISBIDataModule(LightningDataModule):
 	def __init__(self, train_filename):
@@ -50,29 +50,70 @@ class CREMIDataModule(LightningDataModule):
 		return DataLoader(self.val,batch_size=4, num_workers=8)
 
 
-	class NMJDataModule(LightningDataModule):
-		def __init__(self, train_filename, augmenter = None, augment_and_crop=True, pad=0, offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]]):
-			super().__init__()
-			self.train_dims = None
-			self.train_filename = train_filename
-			self.augmenter = augmenter
-			self.augment_and_crop = augment_and_crop
-			self.pad = pad
-			self.offsets = offsets
+class NMJDataModule(LightningDataModule):
+	def __init__(self, train_filename, augmenter = None, augment_and_crop=True, pad=0, offsets=[[-1, 0], [0, -1], [-5, 0], [0, -5]]):
+		super().__init__()
+		self.train_dims = None
+		self.train_filename = train_filename
+		self.augmenter = augmenter
+		self.augment_and_crop = augment_and_crop
+		self.pad = pad
+		self.offsets = offsets
+
+	def setup(self, stage = None):
+		full_dataset = len(NMJDataset(self.train_filename))
+		split_index = 4*full_dataset//5
+		train_indices = list(range(split_index))
+		val_indices = list(range(split_index,full_dataset))
+		self.train = NMJDataset(self.train_filename,indices=train_indices, augmenter=self.augmenter, offsets = self.offsets,
+								augment_and_crop=self.augment_and_crop, pad=self.pad)
+		
+		self.val = NMJDataset(self.train_filename,indices=val_indices, offsets = self.offsets, 
+								augment_and_crop=self.augment_and_crop, pad=self.pad)	
+
+		self.test = NMJDataset(self.train_filename, indices=val_indices, offsets = self.offsets, 
+								augment_and_crop=self.augment_and_crop, pad=self.pad)	
 
 
-		def setup(self, stage = None):
-			full_dataset = len(CREMIDataset(self.train_filename))
-			split_index = 4*full_dataset//5
-			train_indices = list(range(split_index))
-			val_indices = list(range(split_index,full_dataset))
-			self.train = CREMIDataset(self.train_filename,indices=train_indices, augmenter=self.augmenter, offsets = self.offsets,
-									augment_and_crop=self.augment_and_crop, pad=self.pad)
-			self.val = CREMIDataset(self.train_filename,indices=val_indices, offsets = self.offsets, 
-									augment_and_crop=self.augment_and_crop, pad=self.pad)	
+	def train_dataloader(self):
+		return DataLoader(self.train, batch_size=24, num_workers=8, shuffle=True)
 
-		def train_dataloader(self):
-			return DataLoader(self.train, batch_size=4, num_workers=8, shuffle=True)
+	def val_dataloader(self):
+		return DataLoader(self.val, batch_size=3, num_workers=8)
+	
+	def test_dataloader(self):
+		return DataLoader(self.test, batch_size=8, num_workers=8)
 
-		def val_dataloader(self):
-			return DataLoader(self.val, batch_size=4, num_workers=8)
+
+class WingDataModule(LightningDataModule):
+	def __init__(self, train_filename, test_filename, augmenter = None, augment_and_crop=True, pad=0, offsets=[[-1, 0], [0, -1], [-5, 0], [0, -5]]):
+		super().__init__()
+		self.train_dims = None
+		self.train_filename = train_filename
+		self.test_filename = test_filename
+		self.augmenter = augmenter
+		self.augment_and_crop = augment_and_crop
+		self.pad = pad
+		self.offsets = offsets
+
+	def setup(self, stage = None):
+		full_dataset = len(WingDataset(self.train_filename))
+		split_index = 4*full_dataset//5
+		train_indices = list(range(split_index))
+		val_indices = list(range(split_index,full_dataset))
+		self.train = WingDataset(self.train_filename,indices=train_indices, augmenter=self.augmenter, offsets = self.offsets,
+								augment_and_crop=self.augment_and_crop, pad=self.pad)
+		self.val = WingDataset(self.train_filename,indices=val_indices, offsets = self.offsets, 
+								augment_and_crop=self.augment_and_crop, pad=self.pad)	
+
+		self.test = WingDataset(self.test_filename, indices=val_indices, offsets = self.offsets, 
+								augment_and_crop=self.augment_and_crop, pad=self.pad)	
+
+	def train_dataloader(self):
+		return DataLoader(self.train, batch_size=8, num_workers=8, shuffle=True)
+
+	def val_dataloader(self):
+		return DataLoader(self.val, batch_size=8, num_workers=8)
+
+	def test_dataloader(self):
+		return DataLoader(self.test, batch_size=8, num_workers=8)
