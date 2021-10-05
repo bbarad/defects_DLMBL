@@ -4,6 +4,7 @@ import requests
 
 from embeddingutils.transforms import Segmentation2AffinitiesWithPadding
 import glob
+from glob import glob
 import h5py
 from imgaug import augmenters as iaa
 import imgaug as ia
@@ -14,6 +15,8 @@ import tifffile
 import torch
 from torch.utils.data import Dataset
 import zarr
+from scipy import ndimage
+import torch.nn.functional as F
 
 def create_data(
     url, 
@@ -75,13 +78,10 @@ class ISBIDataset(Dataset):
 
 class CREMIDataset(Dataset):
     def __init__(self,filename,indices=None,offsets=[[-1, 0], [0, -1], [-9, 0], [0, -9]], augmenter=None, augment_and_crop=True, pad=0, crop_size=260):
-
-        self.filename = filename
-        # maybe make offsets more flexible. 
-        # Could use len(offsets) to set network output channels?
+        self.filenames = glob(filename) # works with glob strings, but have to pass list of indices if you want to specify indices
         self.offsets=offsets   
         if indices is None:
-            indices = list(range(self.get_num_samples()))
+            indices = [list(range(self.get_num_samples(f))) for f in self.filenames]
         self.x, self.y = self.read_data(indices)
         self.samples = len(self.x)
         self.augment_and_crop = augment_and_crop
@@ -91,23 +91,29 @@ class CREMIDataset(Dataset):
         else:
             self.augmenter = iaa.Identity()
         self.crop_size = crop_size
+        self.cropper = iaa.Sequential([iaa.CropToFixedSize(height=self.crop_size, width=self.crop_size)])
 
     def __len__(self):
         return self.samples
 
-    def get_num_samples(self):
-        with zarr.open(self.filename, 'r') as f:
+    def get_num_samples(self,filename):
+        with zarr.open(filename, 'r') as f:
             samples = len(list(f['raw']))
         return samples
 
     def read_data(self,indices):
-        with zarr.open(self.filename, 'r') as z:
-            x = np.array([z[f'raw/{index}'] for index in indices])
-            y = np.array([z[f'labels/{index}'] for index in indices])
+        xs = []
+        ys = []
+        for f,idxs in zip(self.filenames,indices):
+            with zarr.open(f, 'r') as z:
+                xs.extend([z[f'raw/{index}'] for index in idxs])
+                ys.extend([z[f'labels/{index}'] for index in idxs])
+        x = np.array(xs)
+        y = np.array(ys)
         return x,y
     
 
-    def augment_image_and_labels(self,x,y, cropsize=260):
+    def augment_image_and_labels(self,x,y):
         assert len(x.shape)==2 and len(y.shape)==2
         x = x[...,None]
         y = y[None,...,None]
@@ -135,7 +141,6 @@ class CREMIDataset(Dataset):
         y = skimage.measure.label(y).astype('int16')
         if self.pad:
             x = np.pad(x,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
-            # y = np.pad(y,((self.pad,self.pad),(self.pad,self.pad)),'reflect')
         if self.augment_and_crop:
             x,y = self.augment_image_and_labels(x,y)
         aff = self.affinities(y)
