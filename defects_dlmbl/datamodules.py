@@ -1,7 +1,7 @@
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
-from .datasets import ISBIDataset, CREMIDataset
+from .datasets import ISBIDataset, CREMIDataset, TomoDataset, TomoDatasetSemanticDistance
 
 class ISBIDataModule(LightningDataModule):
 	def __init__(self, train_filename):
@@ -48,3 +48,36 @@ class CREMIDataModule(LightningDataModule):
 
 	def val_dataloader(self):
 		return DataLoader(self.val,batch_size=4, num_workers=8)
+
+class TomoDataModule(CREMIDataModule):
+	def setup(self, stage = None):
+		full_dataset = len(TomoDataset(self.train_filename))
+
+		val_names = ["TT1", "TE1", "TF1"] 
+		self.train = TomoDataset(self.train_filename,validation=False,validation_set=val_names, augmenter=self.augmenter, offsets = self.offsets,
+								augment_and_crop=self.augment_and_crop, pad=self.pad)
+		self.val = TomoDataset(self.train_filename,validation=True,validation_set=val_names, offsets = self.offsets, 
+								augment_and_crop=self.augment_and_crop, pad=self.pad)	
+	
+	def train_dataloader(self):
+		return DataLoader(self.train,batch_size=4, num_workers=4, shuffle=True)
+
+	def val_dataloader(self):
+		return DataLoader(self.val,batch_size=4, num_workers=4,)
+
+class TomoDataSemModule(TomoDataModule):
+	def setup(self, stage = None):
+		full_dataset = len(TomoDataset(self.train_filename))
+
+		val_names = ["TT1", "TE1", "TF1"] 
+		self.train = TomoDatasetSemanticDistance(self.train_filename,validation=False,validation_set=val_names, augmenter=self.augmenter,
+								augment_and_crop=self.augment_and_crop, pad=self.pad)
+		self.val = TomoDatasetSemanticDistance(self.train_filename,validation=True,validation_set=val_names, 
+								augment_and_crop=self.augment_and_crop, pad=self.pad)	
+	
+	def train_dataloader(self):
+		return DataLoader(self.train,batch_size=4, num_workers=4, shuffle=True)
+
+	def val_dataloader(self):
+		return DataLoader(self.val,batch_size=4, num_workers=4,)
+			

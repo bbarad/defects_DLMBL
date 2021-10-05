@@ -62,13 +62,14 @@ class UNetModule(LightningModule):
 			logger.add_image('image', x[0], self.global_step)
 
 			affinity_image = torch.sigmoid(logits)
-			logger.add_image('affinity', affinity_image[0], self.global_step)
+			logger.add_image('affinity', torch.sum(affinity_image[0],0), self.global_step,dataformats='HW')
 			affinity_image = affinity_image.cpu().detach().numpy()
 			segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 
 			logger.add_image('segmentation', segmentation[0], self.global_step, dataformats='CHW')
-			logger.add_image('GT',y[0], self.global_step)
-			if self.global_step % 1000 == 0:
+			logger.add_image('GT',torch.sum(y[0],0), self.global_step,dataformats='HW')
+			
+			if self.global_step % 100 == 0:
 				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
 				imsave(f'{self.image_dir}/{self.global_step}_affinity.tif', affinity_image)
 				imsave(f'{self.image_dir}/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
@@ -94,9 +95,9 @@ class UNetModule(LightningModule):
 		val_loss = val_loss+len(self.offsets)
 		affinity_image = torch.sigmoid(logits).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
-		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
+		# val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
 		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
-		self.log("val_performance", val_scores)
+		# self.log("val_performance", val_scores)
 		return val_loss
 
 	def configure_optimizers(self):
@@ -159,7 +160,7 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 			logits_metric_viz /= logits_metric_viz.max(axis=(-2,-1),keepdims=True)
 			logger.add_image('metric_3',logits_metric_viz, self.global_step)
 			logger.add_image('GT',gt_aff[0], self.global_step)
-			if self.global_step % 1000 == 0:
+			if self.global_step % 100 == 0:
 				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
 				imsave(f'{self.image_dir}/{self.global_step}_affinity.tif', affinity_image)
 				imsave(f'{self.image_dir}/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
@@ -173,7 +174,7 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 		logits=self(x)
 		crop_val = (gt_aff.shape[-1]-logits.shape[-1])/2
 		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
-		crop_val = int(crop_val)
+		# crop_val = int(crop_val)
 		gt_aff = gt_aff[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		gt_aff = gt_aff.float()
@@ -190,4 +191,95 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
 		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
 		self.log("val_performance", val_scores)
+		return val_loss
+
+class UNetModuleSemanticWithDistance(UNetModule):
+	"""Same UNet, but predict 2 layers instead of a million"""
+	def __init__(self, num_fmaps=32, inc_factors=2, depth = 4, image_dir="images"):
+		super().__init__()
+		self.num_fmaps=num_fmaps
+		self.unet = UNet(in_channels=1,
+           num_fmaps=num_fmaps,
+           fmap_inc_factors=inc_factors,
+           downsample_factors=[[2,2] for _ in range(depth-1)],
+           padding='valid')
+		self.final_conv=torch.nn.Conv2d(num_fmaps, 2, 1)
+		self.L1loss = torch.nn.L1Loss()
+		self.DiceLoss = sim.SorensenDiceLoss()
+		self.loss_alpha = 0.5
+		self.tanh = torch.nn.Tanh()
+	
+	def calculate_loss(self,seg,dist,gt_seg,gt_dist):
+		# affinity loss
+		 
+		loss_seg = self.DiceLoss(seg, gt_seg)
+		# metric loss
+		loss_dist = self.L1loss(dist,gt_dist)
+		return (self.loss_alpha)*loss_seg + (1-self.loss_alpha)*loss_dist
+
+	def training_step(self,batch,batch_idx):
+		x, y = batch # batch size > 1
+		logits = self(x)
+		crop_val = (y.shape[-1]-logits.shape[-1])/2 # only works if square
+		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
+		crop_val = int(crop_val)
+		y = y[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		x = x[:,:,crop_val:-crop_val,crop_val:-crop_val]
+
+		logits_seg = logits[:,:1]
+		seg = F.sigmoid(logits_seg)
+		
+		logits_dist = logits[:,1:]
+		dist = self.tanh(logits_dist)
+		dist_seg = dist < 0
+
+		gt_seg = y[:,:1]
+		gt_dist = y[:,1:]
+		loss = self.calculate_loss(logits_seg,logits_dist,gt_seg,gt_dist)
+
+		if self.global_step % 100 == 0:
+			logger = self.logger.experiment
+			logger.add_image('image', x[0], self.global_step)
+			logger.add_image('segmentation', seg[0], self.global_step)
+			logger.add_image('Distance based segmentation', dist_seg[0], self.global_step)
+			logger.add_image('GT seg',gt_seg[0], self.global_step)
+			logger.add_image('distance',dist[0], self.global_step)
+			logger.add_image('GT dist',gt_dist[0], self.global_step)
+			imsave(f'{self.image_dir}/{self.global_step}_learnedsegmentation.tif', seg.cpu().detach().numpy())
+			imsave(f'{self.image_dir}/{self.global_step}_distance.tif', dist.cpu().detach().numpy())
+			imsave(f'{self.image_dir}/{self.global_step}_distance_seg.tif', dist_seg.cpu().detach().numpy())
+			imsave(f'{self.image_dir}/{self.global_step}_gt.tif', gt_seg.cpu().detach().numpy())
+			imsave(f'{self.image_dir}/{self.global_step}_image.tif', x.cpu().detach().numpy())
+
+		self.log('train_loss',loss)
+		try:
+			scores = cremi_metrics.cremi_scores(dist_seg.cpu().detach().numpy(), gt_seg.cpu().detach().numpy())
+			self.log("performance",scores)
+		except:
+			pass
+		return loss
+
+	def validation_step(self,batch,batch_idx):
+		x, y = batch
+		logits = self(x)
+		crop_val = (y.shape[-1]-logits.shape[-1])/2 # only works if square
+		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
+		crop_val = int(crop_val)
+		y = y[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		x = x[:,:,crop_val:-crop_val,crop_val:-crop_val]
+		logits_seg = logits[:,:1]
+		seg = F.sigmoid(logits_seg)
+		
+		logits_dist = logits[:,1:]
+		logits_dist =torch.clamp(logits_dist, -10, 10)
+
+		gt_seg = y[:,:1]
+		gt_dist = y[:,1:]
+		val_loss = self.calculate_loss(logits_seg,logits_dist,gt_seg,gt_dist)
+		try:
+			val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
+			self.log("val_performance", val_scores)
+		except:
+			pass
+		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
 		return val_loss
