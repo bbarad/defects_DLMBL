@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA
 from inferno.extensions.criteria import set_similarity_measures as sim
 from cremi_tools.metrics import cremi_metrics
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 
 class UNetModule(LightningModule):
@@ -244,6 +245,8 @@ class UNetModuleSemanticWithDistance(UNetModule):
 		self.DiceLoss = sim.SorensenDiceLoss()
 		self.loss_alpha = 0.5
 		self.tanh = torch.nn.Tanh()
+		self.image_dir = image_dir
+		
 	
 	def calculate_loss(self,seg,dist,gt_seg,gt_dist):
 		# affinity loss
@@ -266,7 +269,8 @@ class UNetModuleSemanticWithDistance(UNetModule):
 		seg = F.sigmoid(logits_seg)
 		
 		logits_dist = logits[:,1:]
-		dist = self.tanh(logits_dist)
+		# dist = self.tanh(logits_dist)
+		dist = torch.clamp(logits_dist, -30, 30)
 		dist_seg = dist < 0
 
 		gt_seg = y[:,:1]
@@ -307,11 +311,11 @@ class UNetModuleSemanticWithDistance(UNetModule):
 		seg = F.sigmoid(logits_seg)
 		
 		logits_dist = logits[:,1:]
-		logits_dist =torch.clamp(logits_dist, -10, 10)
-
+		dist =torch.clamp(logits_dist, -30, 30)
+		# dist = self.tanh(logits_dist)
 		gt_seg = y[:,:1]
 		gt_dist = y[:,1:]
-		val_loss = self.calculate_loss(logits_seg,logits_dist,gt_seg,gt_dist)
+		val_loss = self.calculate_loss(seg,dist,gt_seg,gt_dist)
 		try:
 			val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
 			self.log("val_performance", val_scores)

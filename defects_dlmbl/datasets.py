@@ -154,7 +154,7 @@ class TomoDataset(CREMIDataset):
         print("Inspecting label fields for views containing ground truth")
         for name, entry in self.data['labels'].arrays():
             for i in range(entry.shape[0]):
-                if np.sum(entry[i]) > 50:
+                if np.sum(entry[i]) > 1000:
                     self.index_map.append((name, i))
             # self.index_map.extend([(name, i) for i in range(entry.shape[0])])
         if validation:
@@ -238,6 +238,7 @@ class TomoDatasetSemanticDistance(TomoDataset):
         else:
             positive_distance = ndimage.distance_transform_edt(y)
             negative_distance = -1*(ndimage.distance_transform_edt(1-y))
-            dist = np.clip(positive_distance+negative_distance, -10, 10)
+            dist = np.clip(positive_distance+negative_distance, -30, 30)
+            # dist = np.tanh(positive_distance+negative_distance)
         y = np.stack((y,dist))
         return x, y

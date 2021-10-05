@@ -15,8 +15,8 @@ parser = pl.Trainer.add_argparse_args(parser)
 args = parser.parse_args()
 
 
-#### EXPERIMENT BLOCK 2 ####
-img_dir = 'tomo_images_block_2'
+#### EXPERIMENT BLOCK 3 ####
+img_dir = 'tomo_images_block_3'
 if not os.path.exists(img_dir):
     os.makedirs(img_dir)
 ia.seed(np.random.randint(1, 100000))
