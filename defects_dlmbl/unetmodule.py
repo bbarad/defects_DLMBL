@@ -1,13 +1,16 @@
 import torch
-from torch.nn import functional as F
 from .disc_loss import DiscriminativeLoss
 from .unet import UNet
 from pytorch_lightning.core.lightning import LightningModule
 from defects_dlmbl.segment_affinities import mutex_watershed
 import numpy as np
 from skimage.io import imsave
+import io
+import PIL
+from sklearn.decomposition import PCA
 from inferno.extensions.criteria import set_similarity_measures as sim
 from cremi_tools.metrics import cremi_metrics
+import matplotlib.pyplot as plt
 
 
 class UNetModule(LightningModule):
@@ -48,7 +51,7 @@ class UNetModule(LightningModule):
 		logits *= (y!=-1).float() # ignore label -1
 		
 		# SDL input shape expects [b, c, ...]
-		py = F.sigmoid(logits) 
+		py = torch.sigmoid(logits) 
 		loss = self.DiceLoss(py, y)
 		loss = loss+len(self.offsets)
 		
@@ -90,7 +93,7 @@ class UNetModule(LightningModule):
 		logits *= (y!=-1).float() # ignore label -1
 		
 		# SDL input shape expects [b, c, ...]
-		py = F.sigmoid(logits) 
+		py = torch.sigmoid(logits) 
 		val_loss = self.DiceLoss(py,y)
 		val_loss = val_loss+len(self.offsets)
 		affinity_image = torch.sigmoid(logits).cpu().detach().numpy()	
@@ -112,16 +115,47 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 		self.final_conv=torch.nn.Conv2d(self.num_fmaps,self.output_dims, 1)
 		device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 		self.DiscriminativeLoss = DiscriminativeLoss(device)
+		self.pca = PCA()
 
 	def calculate_loss(self,logits_aff,logits_metric,gt_aff,gt_seg):
 		# affinity loss
-		py = F.sigmoid(logits_aff) 
+		py = torch.sigmoid(logits_aff) 
 		loss_aff = self.DiceLoss(py, gt_aff)
 		loss_aff += len(self.offsets)
 		loss_aff /= len(self.offsets)
 		# metric loss
 		loss_metric = self.DiscriminativeLoss(logits_metric,gt_seg)
 		return (self.loss_alpha)*loss_aff + (1-self.loss_alpha)*loss_metric
+
+	def scatter_metric_pca(self,logits_metric,sample=3):
+		# making pca scatter if not doing pixel-wise pca vizualization
+		sampled = logits_metric[...,::sample,::sample].reshape(self.metric_dimensions,-1)
+		sampled_pca = self.pca.fit_transform(sampled.T)
+		fig,ax = plt.subplots(1,1,figsize=(10,10))
+		ax.scatter(*sampled_pca.T[:2])
+		buf = io.BytesIO()
+		plt.savefig(buf, format='png')
+		plt.close(fig)
+		p = PIL.Image.open(buf)
+		return torch.tensor(np.array(p))
+
+	def scatter_metric_pca_from_image(self,image_metric_pca,sample=3):
+		# sample from pixel-wize pca image and display first two dimensions as scatter plot
+		sampled_pca = image_metric_pca[:2,::sample,::sample]
+		fig,ax = plt.subplots(1,1,figsize=(10,10))
+		ax.scatter(*sampled_pca[:2])
+		buf = io.BytesIO()
+		plt.savefig(buf, format='png')
+		plt.close(fig)
+		p = PIL.Image.open(buf)
+		return torch.tensor(np.array(p))
+
+	def image_metric_pca(self,logits_metric,return_dimensions=3):
+		full_pca = self.pca.fit_transform(logits_metric.reshape(self.metric_dimensions,-1).T)
+		full_pca = full_pca.T.reshape(logits_metric.shape)[:return_dimensions]
+		full_pca -= full_pca.min(axis=(-2,-1),keepdims=True)
+		full_pca /= full_pca.max(axis=(-2,-1),keepdims=True)
+		return full_pca
 
 	def training_step(self,batch,batch_idx):
 		x,gt_aff,gt_seg=batch
@@ -155,10 +189,12 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 			segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 
 			logger.add_image('segmentation', segmentation[0], self.global_step, dataformats='CHW')
-			logits_metric_viz = logits_metric[0,:3].detach().cpu().numpy()
+			logits_metric_viz = logits_metric[0].detach().cpu().numpy()
 			logits_metric_viz -= logits_metric_viz.min(axis=(-2,-1),keepdims=True)
 			logits_metric_viz /= logits_metric_viz.max(axis=(-2,-1),keepdims=True)
-			logger.add_image('metric_3',logits_metric_viz, self.global_step)
+			image_metric_pca = self.image_metric_pca(logits_metric_viz)
+			logger.add_image('metric_scatter',self.scatter_metric_pca_from_image(image_metric_pca), self.global_step,dataformats='HWC')
+			logger.add_image('metric_image',image_metric_pca,self.global_step)
 			logger.add_image('GT',gt_aff[0], self.global_step)
 			if self.global_step % 100 == 0:
 				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))

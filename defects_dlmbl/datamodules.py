@@ -1,5 +1,6 @@
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
+from glob import glob
 
 from .datasets import ISBIDataset, CREMIDataset, TomoDataset, TomoDatasetSemanticDistance
 
@@ -34,10 +35,17 @@ class CREMIDataModule(LightningDataModule):
 
 
 	def setup(self, stage = None):
-		full_dataset = len(CREMIDataset(self.train_filename))
-		split_index = 4*full_dataset//5
-		train_indices = list(range(split_index))
-		val_indices = list(range(split_index,full_dataset))
+		globbed = glob(self.train_filename) # works with glob strings
+		train_indices = []
+		val_indices = []
+		total = 0
+		for f in globbed:
+			full_dataset = len(CREMIDataset(f))
+			split_index = 4*full_dataset//5
+			train_indices.append(list(range(split_index)))
+			val_indices.append(list(range(split_index,full_dataset)))
+			total+=full_dataset
+		
 		self.train = CREMIDataset(self.train_filename,indices=train_indices, augmenter=self.augmenter, offsets = self.offsets,
 								augment_and_crop=self.augment_and_crop, pad=self.pad)
 		self.val = CREMIDataset(self.train_filename,indices=val_indices, offsets = self.offsets, 
