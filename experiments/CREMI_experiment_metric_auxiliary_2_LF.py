@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 import argparse
 from imgaug import augmenters as iaa
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 import os
 
 
@@ -38,6 +39,6 @@ checkpoint_callback = ModelCheckpoint(
 dm = CREMIDataModule(args.train_file, augmenter=augmenter, offsets = offsets)
 model = UNetModuleWithMetricAuxiliary(offsets=offsets, image_dir=img_dir)
 logger = TensorBoardLogger("logs", name="base_model")
-trainer = pl.Trainer.from_argparse_args(args,checkpoints=[checkpoint])
+trainer = pl.Trainer.from_argparse_args(args,callbacks=[checkpoint_callback])
 
 trainer.fit(model, dm)
