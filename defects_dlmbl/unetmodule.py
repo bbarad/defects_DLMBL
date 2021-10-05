@@ -149,9 +149,9 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 		p = PIL.Image.open(buf)
 		return torch.tensor(np.array(p))
 
-	def image_metric_pca(self,logits_metric):
+	def image_metric_pca(self,logits_metric,return_dimensions=3):
 		full_pca = self.pca.fit_transform(logits_metric.reshape(self.metric_dimensions,-1).T)
-		full_pca = full_pca.T.reshape(logits_metric.shape)[:3]
+		full_pca = full_pca.T.reshape(logits_metric.shape)[:return_dimensions]
 		full_pca -= full_pca.min(axis=(-2,-1),keepdims=True)
 		full_pca /= full_pca.max(axis=(-2,-1),keepdims=True)
 		return full_pca
