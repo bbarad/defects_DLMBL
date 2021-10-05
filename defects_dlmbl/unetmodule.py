@@ -65,14 +65,14 @@ class UNetModule(LightningModule):
 			logger.add_image('image', x[0], self.global_step)
 
 			affinity_image = torch.sigmoid(logits)
-			logger.add_image('affinity', torch.sum(affinity_image[0],0), self.global_step,dataformats='HW')
+			logger.add_image('affinity', affinity_image[0], self.global_step)
 			affinity_image = affinity_image.cpu().detach().numpy()
 			segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
 
 			logger.add_image('segmentation', segmentation[0], self.global_step, dataformats='CHW')
-			logger.add_image('GT',torch.sum(y[0],0), self.global_step,dataformats='HW')
+			logger.add_image('GT',y[0], self.global_step)
 			
-			if self.global_step % 100 == 0:
+			if self.global_step % 1000 == 0:
 				imsave(f'{self.image_dir}/{self.global_step}_segmentation.tif', segmentation.astype(np.uint16))
 				imsave(f'{self.image_dir}/{self.global_step}_affinity.tif', affinity_image)
 				imsave(f'{self.image_dir}/{self.global_step}_gt.tif', gt_seg[0].cpu().detach().numpy())
@@ -98,9 +98,9 @@ class UNetModule(LightningModule):
 		val_loss = val_loss+len(self.offsets)
 		affinity_image = torch.sigmoid(logits).cpu().detach().numpy()	
 		segmentation = mutex_watershed(affinity_image,self.offsets,self.separating_channel,strides=None)
-		# val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
+		val_scores = cremi_metrics.cremi_scores(segmentation, gt_seg.cpu().numpy())
 		self.log("val_loss", val_loss, prog_bar=True, on_epoch=True)
-		# self.log("val_performance", val_scores)
+		self.log("val_performance", val_scores)
 		return val_loss
 
 	def configure_optimizers(self):
@@ -179,7 +179,7 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 		
 		logger = self.logger.experiment
 		self.log('train_loss',loss)
-		if self.global_step % 100 == 0:
+		if self.global_step % 1000 == 0:
 			
 			logger.add_image('image', x[0], self.global_step)
 
@@ -210,7 +210,7 @@ class UNetModuleWithMetricAuxiliary(UNetModule):
 		logits=self(x)
 		crop_val = (gt_aff.shape[-1]-logits.shape[-1])/2
 		assert crop_val == int(crop_val), "Can't crop by an odd total pixel count"
-		# crop_val = int(crop_val)
+		crop_val = int(crop_val)
 		gt_aff = gt_aff[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		gt_seg = gt_seg[:,:,crop_val:-crop_val,crop_val:-crop_val]
 		gt_aff = gt_aff.float()
